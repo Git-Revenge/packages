@@ -4,25 +4,103 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Git Revenge packages</title>
+<meta name="description" content="Signed apt and dnf repositories for Git Revenge, a fast, local-only desktop git client.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Cpath d=%27M11 8 H18 V58 H11 Z%27 fill=%27%235ba3b8%27/%3E%3Cpath d=%27M18 11 C28 6 39 16 56 10 V39 C39 45 28 35 18 41 Z%27 fill=%27%23e24a8a%27/%3E%3C/svg%3E">
 <style>
-  :root { color-scheme: light dark; --bg: #faf8f4; --fg: #1c1b19; --muted: #6b675f; --code: #efebe3; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #171614; --fg: #ece8df; --muted: #9a958a; --code: #24221f; } }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
-  main { max-width: 46rem; margin: 0 auto; padding: 3rem 1rem; }
-  h1 { font-family: Georgia, serif; font-weight: 600; margin: 0 0 .25rem; }
-  p.lede { color: var(--muted); margin-top: 0; }
-  pre { background: var(--code); padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 14px; }
-  a { color: inherit; }
+  /* The main site's "Ink & Agency" look: Fraunces, Crimson Pro, Caveat and JetBrains Mono,
+     served from this site so a visitor's browser asks nobody else for them. */
+  @font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 100 900; font-display: swap; src: url(fonts/fraunces-latin-full-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'Fraunces'; font-style: italic; font-weight: 100 900; font-display: swap; src: url(fonts/fraunces-latin-full-italic.woff2) format('woff2'); }
+  @font-face { font-family: 'Crimson Pro'; font-style: normal; font-weight: 200 900; font-display: swap; src: url(fonts/crimson-pro-latin-wght-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'Crimson Pro'; font-style: italic; font-weight: 200 900; font-display: swap; src: url(fonts/crimson-pro-latin-wght-italic.woff2) format('woff2'); }
+  @font-face { font-family: 'Caveat'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(fonts/caveat-latin-wght-normal.woff2) format('woff2'); }
+  @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 100 800; font-display: swap; src: url(fonts/jetbrains-mono-latin-wght-normal.woff2) format('woff2'); }
+
+  :root {
+    color-scheme: light dark;
+    --rose: #cb0162; --rose-hover: #a8014f; --navy: #1a5b6e; --plum: #6b3a6e;
+    --ink: #1a1614; --body: #3a322c; --muted: #6b625a; --faint: #9a9088;
+    --paper: #faf6ef; --vellum: #f4ecdd; --parchment: #ede3cf;
+    --rule: rgba(26, 22, 20, 0.10);
+    --card: #2a2220; --card-ink: #f0e6d2; --card-body: #c8bfb4; --card-code: rgba(240, 230, 210, 0.06);
+    --serif: 'Crimson Pro', Georgia, 'Times New Roman', serif;
+    --display: 'Fraunces', Georgia, 'Times New Roman', serif;
+    --hand: 'Caveat', cursive;
+    --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --rose: #e24a8a; --rose-hover: #f06aa2; --navy: #5ba3b8;
+      --ink: #f0e6d2; --body: #c8bfb4; --muted: #9a9088; --faint: #7d746c;
+      --paper: #1a1614; --vellum: #221e1c; --parchment: #2e2826;
+      --rule: rgba(240, 230, 210, 0.08);
+      --card: #2e2826;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.7 var(--serif); -webkit-font-smoothing: antialiased; }
+  a { color: var(--rose); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  a:hover { color: var(--rose-hover); }
+  code { font-family: var(--mono); font-size: 0.8em; background: var(--parchment); color: var(--plum); padding: 2px 5px; border-radius: 2px; }
+  @media (prefers-color-scheme: dark) { code { color: var(--rose); } }
+
+  .hero { background: var(--vellum); border-bottom: 1px dashed var(--rule); padding: 72px 16px 64px; text-align: center; }
+  .eyebrow { font-family: var(--hand); font-size: 1.6rem; color: var(--rose); display: inline-block; transform: rotate(-2deg); line-height: 1; margin-bottom: 0.5rem; }
+  h1 { font-family: var(--display); font-weight: 500; font-size: clamp(2.75rem, 9vw, 5rem); letter-spacing: -0.035em; line-height: 0.95; margin: 0 0 1.25rem; }
+  h1 em { color: var(--rose); }
+  .lede { max-width: 560px; margin: 0 auto; font-size: 1.2rem; line-height: 1.6; color: var(--body); }
+  .facts { list-style: none; padding: 0; margin: 1.75rem 0 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.25rem 0; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .facts li + li::before { content: '·'; margin: 0 0.75rem; color: var(--faint); }
+
+  main { max-width: 1040px; margin: 0 auto; padding: 56px 16px 64px; }
+  .section-eyebrow { font-family: var(--hand); font-size: 1.5rem; color: var(--navy); display: inline-block; transform: rotate(-1.5deg); line-height: 1; }
+  h2 { font-family: var(--display); font-weight: 400; font-size: clamp(2rem, 5vw, 2.75rem); letter-spacing: -0.02em; margin: 0.25rem 0 1.75rem; }
+  h2 em { color: var(--rose); }
+
+  .grid { display: grid; gap: 1.375rem; }
+  .card { min-width: 0; display: flex; flex-direction: column; background: var(--card); border-radius: 3px; padding: 1.5rem; box-shadow: 0 16px 40px -12px rgba(203, 1, 98, 0.18); }
+  .card h3 { font-family: var(--display); font-weight: 500; font-size: 1.3rem; color: var(--card-ink); margin: 0 0 0.25rem; }
+  .card p { font-size: 1rem; line-height: 1.5; color: var(--card-body); margin: 0 0 1rem; }
+  .card p code { background: var(--card-code); color: var(--card-ink); }
+  .card .note { margin: 1rem 0 0; font-size: 0.95rem; }
+  .code { position: relative; flex: 1; }
+  pre { margin: 0; font-family: var(--mono); font-size: 0.72rem; line-height: 1.65; color: var(--card-ink); background: var(--card-code); border-radius: 2px; padding: 0.875rem 5rem 0.875rem 1rem; overflow-x: auto; }
+  .copy { position: absolute; top: 0.5rem; right: 0.5rem; font: 500 0.75rem var(--display); color: var(--card-body); background: var(--card); border: 1px solid rgba(240, 230, 210, 0.2); border-radius: 2px; padding: 0.2rem 0.6rem; cursor: pointer; }
+  .copy:hover, .copy:focus-visible { color: #f0e6d2; border-color: #e24a8a; }
+
+  .key { margin-top: 3rem; padding-top: 2.5rem; border-top: 1px dashed var(--rule); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1.5rem 3rem; }
+  .key h3 { font-family: var(--display); font-weight: 500; font-size: 1.2rem; margin: 0 0 0.25rem; }
+  .key p { margin: 0; color: var(--body); }
+  .fingerprint { display: block; margin-top: 0.5rem; font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.02em; color: var(--ink); word-spacing: 0.15em; }
+
+  footer { background: var(--vellum); border-top: 1px dashed var(--rule); padding: 22px 16px; }
+  .bar { max-width: 1040px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem 1.5rem; font-size: 0.9rem; }
+  .brand { display: flex; align-items: center; gap: 9px; font-style: italic; color: var(--muted); }
+  .links { display: flex; flex-wrap: wrap; gap: 0.5rem 22px; }
+  .links a { color: var(--faint); text-decoration: none; }
+  .links a:hover { color: var(--rose); }
+  @media (max-width: 600px) { .card { padding: 1rem; } .hero { padding: 56px 16px 48px; } main { padding-top: 40px; } }
 </style>
 </head>
 <body>
-<main>
-<h1>Git Revenge packages</h1>
-<p class="lede">Signed apt and dnf repositories for <a href="https://gitrevenge.com/">Git Revenge</a>.</p>
+<header class="hero">
+  <div class="eyebrow">apt &amp; dnf, signed</div>
+  <h1>Git <em>Revenge</em> packages</h1>
+  <p class="lede">Repositories for <a href="https://gitrevenge.com/">Git Revenge</a>, the fast, local-only desktop git client. Add one once, and it updates with the rest of your system.</p>
+  <ul class="facts"><li>Ubuntu 24.04+</li><li>Debian 13+</li><li>RHEL 9 &amp; 10</li><li>x86-64</li></ul>
+</header>
 
-<h2>Ubuntu 24.04+ and Debian 13+</h2>
-<pre>sudo install -d -m 0755 /etc/apt/keyrings
-sudo curl -fsSLo /etc/apt/keyrings/gitrevenge.asc https://packages.gitrevenge.com/gitrevenge.asc
+<main>
+  <div class="section-eyebrow">two minutes</div>
+  <h2>Add the <em>repository</em></h2>
+  <div class="grid">
+    <section class="card">
+      <h3>Ubuntu and Debian</h3>
+      <p>Ubuntu 24.04 or Debian 13, or newer.</p>
+      <div class="code"><button class="copy" type="button">Copy</button><pre>sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/gitrevenge.asc \
+  https://packages.gitrevenge.com/gitrevenge.asc
 sudo tee /etc/apt/sources.list.d/gitrevenge.sources &gt;/dev/null &lt;&lt;'EOF'
 Types: deb
 URIs: https://packages.gitrevenge.com/apt
@@ -31,16 +109,60 @@ Components: main
 Architectures: amd64
 Signed-By: /etc/apt/keyrings/gitrevenge.asc
 EOF
-sudo apt update &amp;&amp; sudo apt install gitrevenge</pre>
-
-<h2>RHEL, AlmaLinux and Rocky Linux 9 and 10</h2>
-<p>On 10, enable EPEL first (<code>sudo dnf install epel-release</code>).</p>
-<pre>sudo curl -fsSLo /etc/yum.repos.d/gitrevenge.repo \
+sudo apt update &amp;&amp; sudo apt install gitrevenge</pre></div>
+    </section>
+    <section class="card">
+      <h3>RHEL, AlmaLinux and Rocky Linux</h3>
+      <p>Versions 9 and 10. On 10, turn on EPEL first: <code>sudo dnf install epel-release</code>, or on RHEL, the steps in the <a href="https://gitrevenge.com/docs/guide/install#rhel-10" style="color:#e24a8a">install guide</a>.</p>
+      <div class="code"><button class="copy" type="button">Copy</button><pre>sudo curl -fsSLo /etc/yum.repos.d/gitrevenge.repo \
   "https://packages.gitrevenge.com/rpm/gitrevenge-el$(rpm -E %rhel).repo"
-sudo dnf install gitrevenge</pre>
+sudo dnf install gitrevenge</pre></div>
+      <p class="note">dnf asks you to accept the key the first time. Check its fingerprint below.</p>
+    </section>
+  </div>
 
-<p>Key fingerprint: <code>03A4 C486 592C CA4D A332&nbsp; B396 1221 F135 7F3C 5ECA</code> (<a href="gitrevenge.asc">gitrevenge.asc</a>).
-Source: <a href="https://github.com/Git-Revenge/packages">Git-Revenge/packages</a>.</p>
+  <div class="key">
+    <div>
+      <h3>The signing key</h3>
+      <p>Both repositories, and every RPM in them, are signed with <a href="gitrevenge.asc">one key</a>. Its fingerprint:
+        <span class="fingerprint">03A4 C486 592C CA4D A332&nbsp; B396 1221 F135 7F3C 5ECA</span></p>
+    </div>
+    <div>
+      <h3>What's here</h3>
+      <p>The three newest stable releases, so you can go back one if you need to. Release candidates aren't published here. Each release reaches the repositories as soon as it's out; see the <a href="https://github.com/Git-Revenge/packages">source</a> for how.</p>
+    </div>
+  </div>
 </main>
+
+<footer>
+  <div class="bar">
+    <span class="brand">
+      <svg viewBox="0 0 64 64" width="20" height="20" aria-hidden="true"><path d="M11 8 H18 V58 H11 Z" fill="#5ba3b8"></path><path d="M18 11 C28 6 39 16 56 10 V39 C39 45 28 35 18 41 Z" fill="#e24a8a"></path></svg>
+      <span>Git Revenge, a git client</span>
+    </span>
+    <nav class="links" aria-label="Links">
+      <a href="https://gitrevenge.com/">gitrevenge.com</a>
+      <a href="https://gitrevenge.com/docs/guide/install">Install guide</a>
+      <a href="https://github.com/Git-Revenge/GitRevenge/releases">Releases</a>
+      <a href="https://github.com/Git-Revenge/GitRevenge/security/policy">Security</a>
+      <a href="https://gitrevenge.com/docs/privacy">Privacy</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+  for (const button of document.querySelectorAll('.copy')) {
+    button.addEventListener('click', async () => {
+      const text = button.nextElementSibling.textContent
+      try {
+        await navigator.clipboard.writeText(text)
+        button.textContent = 'Copied'
+      } catch {
+        button.textContent = 'Select and copy'
+      }
+      setTimeout(() => { button.textContent = 'Copy' }, 1600)
+    })
+  }
+</script>
 </body>
 </html>
