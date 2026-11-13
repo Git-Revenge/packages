@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Git Revenge packages</title>
+<style>
+  :root { color-scheme: light dark; --bg: #faf8f4; --fg: #1c1b19; --muted: #6b675f; --code: #efebe3; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #171614; --fg: #ece8df; --muted: #9a958a; --code: #24221f; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
+  main { max-width: 46rem; margin: 0 auto; padding: 3rem 1rem; }
+  h1 { font-family: Georgia, serif; font-weight: 600; margin: 0 0 .25rem; }
+  p.lede { color: var(--muted); margin-top: 0; }
+  pre { background: var(--code); padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 14px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+<h1>Git Revenge packages</h1>
+<p class="lede">Signed apt and dnf repositories for <a href="https://gitrevenge.com/">Git Revenge</a>.</p>
+
+<h2>Ubuntu 24.04+ and Debian 13+</h2>
+<pre>sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/gitrevenge.asc https://packages.gitrevenge.com/gitrevenge.asc
+sudo tee /etc/apt/sources.list.d/gitrevenge.sources &gt;/dev/null &lt;&lt;'EOF'
+Types: deb
+URIs: https://packages.gitrevenge.com/apt
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/gitrevenge.asc
+EOF
+sudo apt update &amp;&amp; sudo apt install gitrevenge</pre>
+
+<h2>RHEL, AlmaLinux and Rocky Linux 9 and 10</h2>
+<p>On 10, enable EPEL first (<code>sudo dnf install epel-release</code>).</p>
+<pre>sudo curl -fsSLo /etc/yum.repos.d/gitrevenge.repo \
+  "https://packages.gitrevenge.com/rpm/gitrevenge-el$(rpm -E %rhel).repo"
+sudo dnf install gitrevenge</pre>
+
+<p>Key fingerprint: <code>03A4 C486 592C CA4D A332&nbsp; B396 1221 F135 7F3C 5ECA</code> (<a href="gitrevenge.asc">gitrevenge.asc</a>).
+Source: <a href="https://github.com/Git-Revenge/packages">Git-Revenge/packages</a>.</p>
+</main>
+</body>
+</html>

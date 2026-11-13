@@ -1,0 +1,232 @@
+name: Publish
+
+# Builds signed apt and dnf repositories from the newest stable Git Revenge releases and
+# deploys them to GitHub Pages (packages.gitrevenge.com). Package files are never committed:
+# every run downloads them from the releases, checks their sha256 digests, and rebuilds.
+#
+# Runs every six hours, by hand, on a push to main, or when the main repo sends a "release"
+# repository_dispatch. A scheduled run skips the build when the live site already has
+# the same releases.
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [release]
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://packages.gitrevenge.com
+  SOURCE_REPO: Git-Revenge/GitRevenge
+  # How many stable releases the repositories keep, so `apt install gitrevenge=<old>` and
+  # `dnf downgrade gitrevenge` still work after an upgrade.
+  KEEP: 3
+  KEY_FINGERPRINT: 03A4C486592CCA4DA332B3961221F1357F3C5ECA
+
+jobs:
+  select:
+    name: Pick releases
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.pick.outputs.build }}
+    steps:
+      - name: List stable releases with Linux packages
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$SOURCE_REPO/releases?per_page=30" --jq "[.[]
+            | select(.draft | not) | select(.prerelease | not)
+            | select(any(.assets[]; .name | endswith(\"-linux-amd64.deb\")))
+            | {tag: .tag_name, assets: [.assets[]
+                | select(.name | test(\"-(linux-amd64[.]deb|el9[.]x86_64[.]rpm|el10[.]x86_64[.]rpm)$\"))
+                | {name, url: .browser_download_url, digest}]}][:$KEEP]" > releases.json
+          versions=$(jq -r '.[].tag' releases.json | sort -V | paste -sd' ')
+          if [ -z "$versions" ]; then echo "::error::No stable release has Linux packages"; exit 1; fi
+          echo "Releases: $versions"
+          live=$(curl -fsSL "$SITE_URL/versions.txt" 2>/dev/null | paste -sd' ' || true)
+          build=true
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$live" = "$versions" ]; then
+            echo "The live site already has these releases."
+            build=false
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: steps.pick.outputs.build == 'true'
+        with:
+          name: releases
+          path: releases.json
+
+  apt:
+    name: Build apt repository
+    needs: select
+    if: needs.select.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: releases
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y apt-utils
+      - name: Download and verify packages
+        run: bash scripts/fetch.sh releases.json 'linux-amd64[.]deb$' site/apt/pool/main/g/gitrevenge
+      - name: Import the signing key
+        if: github.event_name != 'pull_request'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: bash scripts/import-key.sh
+      - name: Build the index
+        working-directory: site/apt
+        run: |
+          dist=dists/stable
+          mkdir -p "$dist/main/binary-amd64"
+          apt-ftparchive packages pool > "$dist/main/binary-amd64/Packages"
+          gzip -9kn "$dist/main/binary-amd64/Packages"
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin="Git Revenge" \
+            -o APT::FTPArchive::Release::Label="Git Revenge" \
+            -o APT::FTPArchive::Release::Suite=stable \
+            -o APT::FTPArchive::Release::Codename=stable \
+            -o APT::FTPArchive::Release::Architectures=amd64 \
+            -o APT::FTPArchive::Release::Components=main \
+            -o APT::FTPArchive::Release::Description="Git Revenge stable releases" \
+            release "$dist" > Release.tmp
+          mv Release.tmp "$dist/Release"
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            gpg --batch --yes --digest-algo SHA512 -u "$KEY_FINGERPRINT" --clearsign -o "$dist/InRelease" "$dist/Release"
+            gpg --batch --yes --digest-algo SHA512 -u "$KEY_FINGERPRINT" -abs -o "$dist/Release.gpg" "$dist/Release"
+          fi
+          cat "$dist/Release"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-apt
+          path: site
+
+  rpm:
+    name: Build dnf repositories
+    needs: select
+    if: needs.select.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    container: almalinux:10
+    steps:
+      - name: Install tools
+        run: dnf install -y createrepo_c rpm-sign gnupg2 jq git
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: releases
+      - name: Download and verify packages
+        run: |
+          for el in el9 el10; do
+            bash scripts/fetch.sh releases.json "-$el[.]x86_64[.]rpm\$" "site/rpm/$el/x86_64"
+          done
+      - name: Import the signing key
+        if: github.event_name != 'pull_request'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: bash scripts/import-key.sh
+      - name: Sign packages and build the metadata
+        run: |
+          signing=false
+          [ "$GITHUB_EVENT_NAME" != pull_request ] && signing=true
+          if $signing; then
+            echo "%_gpg_name $KEY_FINGERPRINT" > ~/.rpmmacros
+            rpm --import gitrevenge.asc
+          fi
+          for el in el9 el10; do
+            dir="site/rpm/$el/x86_64"
+            if $signing; then
+              rpmsign --addsign "$dir"/*.rpm
+              rpm -K "$dir"/*.rpm
+            fi
+            createrepo_c --general-compress-type=gz "$dir"
+            if $signing; then
+              gpg --batch --yes --digest-algo SHA512 -u "$KEY_FINGERPRINT" -abs --armor \
+                -o "$dir/repodata/repomd.xml.asc" "$dir/repodata/repomd.xml"
+            fi
+            cat > "site/rpm/gitrevenge-$el.repo" <<EOF
+          [gitrevenge]
+          name=Git Revenge
+          baseurl=$SITE_URL/rpm/$el/x86_64
+          enabled=1
+          gpgcheck=1
+          repo_gpgcheck=1
+          gpgkey=$SITE_URL/gitrevenge.asc
+          EOF
+            sed -i 's/^ *//' "site/rpm/gitrevenge-$el.repo"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-rpm
+          path: site
+
+  assemble:
+    name: Assemble the site
+    needs: [select, apt, rpm]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: site-*
+          path: site
+          merge-multiple: true
+      - uses: actions/download-artifact@v5
+        with:
+          name: releases
+      - name: Add the key, the landing page and the version list
+        run: |
+          cp gitrevenge.asc index.html site/
+          jq -r '.[].tag' releases.json | sort -V > site/versions.txt
+          find site -type f | sort
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  verify:
+    name: Install on ${{ matrix.image }}
+    needs: assemble
+    # The PR dry run is unsigned, so there is nothing to verify the way users install.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:24.04, debian:13, almalinux:9, almalinux:10]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: github-pages
+      - name: Install from a local copy of the site, the way the README says
+        run: |
+          mkdir site && tar -xf artifact.tar -C site
+          python3 -m http.server 8080 --directory site >/dev/null 2>&1 &
+          sleep 1 && curl -fsS http://localhost:8080/versions.txt
+          docker run --rm --network host -v "$PWD/scripts:/scripts:ro" "${{ matrix.image }}" \
+            bash /scripts/install-test.sh http://localhost:8080
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: verify
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
