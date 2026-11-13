@@ -186,7 +186,7 @@ jobs:
           name: releases
       - name: Add the key, the landing page and the version list
         run: |
-          cp gitrevenge.asc index.html site/
+          cp -r gitrevenge.asc index.html fonts site/
           jq -r '.[].tag' releases.json | sort -V > site/versions.txt
           find site -type f | sort
       - uses: actions/upload-pages-artifact@v3
